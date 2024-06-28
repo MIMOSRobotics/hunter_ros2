@@ -16,19 +16,19 @@ namespace westonrobot {
 /* hunter Parameters */
 struct HunterV2Params {
   static constexpr double track =
-      0.605;  // in meter (left & right wheel distance)
+      0.52488;  // in meter (left & right wheel distance)
   static constexpr double wheelbase =
-      0.650;  // in meter (front & rear wheel distance)
-  static constexpr double wheel_radius = 0.165;              // in meter
+      0.54235;  // in meter (front & rear wheel distance)
+  static constexpr double wheel_radius = 0.1375;              // in meter
   static constexpr double transmission_reduction_rate = 30;  // 1:30
 
   // from user manual v1.2.6_S P4
   // max linear velocity: 1.5 m/s
   static constexpr double max_steer_angle =
-      0.58;  // in rad, 0.75 for inner wheel
+      0.38397244;  // in rad, 0.75 for inner wheel
   static constexpr double max_steer_angle_central =
-      0.461;  // max central angle
-  static constexpr double max_linear_speed = 1.5;  // in m/ss
+      0.32590417;  // max central angle
+  static constexpr double max_linear_speed = 1.5;  // in m/s. HunterSE can go 4.8. For safety, we set it to 1.5.
 };
 
 struct HunterV1Params {
