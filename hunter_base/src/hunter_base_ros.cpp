@@ -128,16 +128,16 @@ void HunterBaseRos::Run() {
       return;
     }
 
-    // // publish robot state at 50Hz while listening to twist commands
-    // messenger->SetupSubscription();
-    // rclcpp::Rate rate(50);
-    // keep_running_ = true;
-    // while (keep_running_) {
-    //   messenger->PublishStateToROS();
-    //   // robot_->EnableCommandedMode();
-    //   rclcpp::spin_some(shared_from_this());
-    //   rate.sleep();
-    // // }
+    // publish robot state at 50Hz while listening to twist commands
+    messenger->SetupSubscription();
+    rclcpp::Rate rate(50);
+    keep_running_ = true;
+    while (keep_running_) {
+      messenger->PublishStateToROS();
+      // robot_->EnableCommandedMode();
+      rclcpp::spin_some(shared_from_this());
+      rate.sleep();
     // }
+    }
 }
 }  // namespace westonrobot
