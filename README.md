@@ -61,18 +61,18 @@ Nvidia Jeston TX2/Xavier/XavierNX have CAN controller(s) integrated in the main 
     ```
     $ ros2 launch hunter_base hunter_base.launch.py
     ```
-* Then you can send command to the robot
+* Then you can send command to the robot (now expects `geometry_msgs/msg/TwistStamped` with a header timestamp)
     ```
-    $ ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "linear:
-    x: 0.0
-    y: 0.0
-    z: 0.0
-    angular:
-    x: 0.0
-    y: 0.0
-    z: 0.0" 
+    # Example: drive forward 0.5 m/s with a gentle turn
+    $ ros2 topic pub /cmd_vel geometry_msgs/msg/TwistStamped '{header: {frame_id: base_link}, twist: {linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.2}}}'
+    ```
 
+    If you need to stream at a fixed rate (e.g. 10 Hz):
     ```
+    $ ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/TwistStamped '{header: {frame_id: base_link}, twist: {linear: {x: 0.3}, angular: {z: 0.0}}}'
+    ```
+
+    (Older `geometry_msgs/msg/Twist` publishing will no longer be received unless you restore the legacy subscriber.)
 
 **SAFETY PRECAUSION**: 
 

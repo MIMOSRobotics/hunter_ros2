@@ -17,6 +17,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
@@ -87,10 +88,11 @@ class HunterMessenger {
         "/hunter_status", 10);
 
     // cmd subscriber
-    motion_cmd_sub_ = node_->create_subscription<geometry_msgs::msg::Twist>(
-        "/cmd_vel", 10,
-        std::bind(&HunterMessenger::TwistCmdCallback, this,
-                  std::placeholders::_1));
+  // Subscribe to TwistStamped to get timestamped velocity commands
+  motion_cmd_sub_ = node_->create_subscription<geometry_msgs::msg::TwistStamped>(
+    "/cmd_vel", 10,
+    std::bind(&HunterMessenger::TwistStampedCmdCallback, this,
+          std::placeholders::_1));
 
     
   }
@@ -178,7 +180,7 @@ class HunterMessenger {
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   rclcpp::Publisher<hunter_msgs::msg::HunterStatus>::SharedPtr status_pub_;
 
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr motion_cmd_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr motion_cmd_sub_;
   
 
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
@@ -196,30 +198,45 @@ class HunterMessenger {
 
   rclcpp::Time last_time_;
   rclcpp::Time current_time_;
+  rclcpp::Time last_cmd_time_;
+  double cmd_timeout_sec_ = 0.0;  // 0 => disabled (can be exposed via parameter if needed)
 
+  // Legacy (unused now) Twist callback retained for backward compatibility if needed
   void TwistCmdCallback(const geometry_msgs::msg::Twist::SharedPtr msg) {
-    
+    rclcpp::Time now = node_->get_clock()->now();
+    last_cmd_time_ = now;
     if (!simulated_robot_) {
-      SetHunterMotionCommand(msg);
+      SetHunterMotionCommand(*msg, now);
     } else {
       std::lock_guard<std::mutex> guard(twist_mutex_);
       current_twist_ = *msg.get();
     }
-    // ROS_INFO("Cmd received:%f, %f", msg->linear.x, msg->angular.z);
+  }
+
+  // New TwistStamped callback (primary)
+  void TwistStampedCmdCallback(const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
+    last_cmd_time_ = msg->header.stamp;
+    if (!simulated_robot_) {
+      SetHunterMotionCommand(msg->twist, msg->header.stamp);
+    } else {
+      std::lock_guard<std::mutex> guard(twist_mutex_);
+      current_twist_ = msg->twist;
+    }
   }
 
   // template <typename T,std::enable_if_t<!std::is_base_of<HunterRobot, T>::value,bool> = true>
+  // Deprecated interface kept (pointer version)
   void SetHunterMotionCommand(const geometry_msgs::msg::Twist::SharedPtr &msg) {
+    SetHunterMotionCommand(*msg, node_->get_clock()->now());
+  }
 
-    std::shared_ptr<HunterRobot> base;
-
+  // Preferred interface using value and timestamp
+  void SetHunterMotionCommand(const geometry_msgs::msg::Twist &twist, const rclcpp::Time &stamp) {
+    (void)stamp; // stamp available for latency / logging / timeout logic
     double radian = 0;
-    double phi_i = AngelVelocity2Angel(*msg,radian);
-
+    double phi_i = AngelVelocity2Angel(twist, radian);
     std::cout << "set steering angle: " << phi_i << std::endl;
-    hunter_->SetMotionCommand(msg->linear.x, phi_i);
-    // hunter_
- 
+    hunter_->SetMotionCommand(twist.linear.x, phi_i);
   }
 
   double ConvertCentralAngleToInner(double angle)
