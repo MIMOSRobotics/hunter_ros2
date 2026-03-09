@@ -1,0 +1,63 @@
+/**:
+  ros__parameters:
+    # ============================================
+    # CAN/Serial Communication
+    # ============================================
+    # Port name for robot communication (CAN or serial)
+    # Common values: "can0", "can1", "/dev/ttyUSB0"
+    port_name: "can0"
+
+    # ============================================
+    # Frame and Topic Names
+    # ============================================
+    # Frame ID for odometry origin (world reference frame)
+    odom_frame: "odom"
+    
+    # Frame ID for robot base (robot center/footprint)
+    base_frame: "base_link"
+    
+    # Topic name for publishing odometry messages
+    odom_topic_name: "/odom"
+
+    # ============================================
+    # Robot Model Configuration
+    # ============================================
+    # Set to true if using Hunter Mini (smaller model variant)
+    is_hunter_mini: false
+    
+    # Set to true if robot has omnidirectional wheels (Mecanum wheels)
+    is_omni_wheel: false
+
+    # ============================================
+    # Command Input Configuration
+    # ============================================
+    # Command message type to subscribe to on /cmd_vel topic
+    # Available options:
+    #   - "twist"                  : geometry_msgs/Twist (no timestamp)
+    #   - "twist_stamped"          : geometry_msgs/TwistStamped (with timestamp) [DEFAULT]
+    #   - "ackermann_drive"        : ackermann_msgs/AckermannDrive (no timestamp)
+    #   - "ackermann_drive_stamped": ackermann_msgs/AckermannDriveStamped (with timestamp)
+    #
+    # Twist messages: linear.x (velocity), angular.z (steering angular velocity)
+    # Ackermann messages: speed (linear velocity), steering_angle (radians)
+    cmd_msg_type: "twist_stamped"
+
+    # ============================================
+    # Simulation Configuration
+    # ============================================
+    # Set to true when using in simulation (simulator publishes /clock topic)
+    # Set to false for real robot (uses system time)
+    simulated_robot: false
+    
+    # Control loop rate in Hz (only used in simulation mode)
+    # Determines how often commands are processed when simulated_robot=true
+    control_rate: 50
+
+    # ============================================
+    # Geometry Parameters (auto-configured by SetTrack/SetWeelbase)
+    # Note: These are typically set programmatically and not in config
+    # Included here for reference only
+    # ============================================
+    # wheelbase: 1.2  # Distance between front and rear axles (meters)
+    # track: 0.8      # Distance between left and right wheels (meters)
+    # max_steer_angle: 0.52  # Maximum steering angle in central coordinates (radians, ~30°)

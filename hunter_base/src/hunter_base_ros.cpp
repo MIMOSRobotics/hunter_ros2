@@ -11,6 +11,8 @@
 
 #include "hunter_base/hunter_messenger.hpp"
 #include "ugv_sdk/utilities/protocol_detector.hpp"
+#include <chrono>
+#include <thread>
 
 namespace westonrobot {
 HunterBaseRos::HunterBaseRos(std::string node_name)
@@ -26,6 +28,7 @@ HunterBaseRos::HunterBaseRos(std::string node_name)
 
   this->declare_parameter("simulated_robot", rclcpp::ParameterValue(false));
   this->declare_parameter("control_rate", rclcpp::ParameterValue(50));
+  this->declare_parameter("cmd_msg_type", rclcpp::ParameterValue("twist_stamped"));
 
   LoadParameters();
 }
@@ -130,14 +133,22 @@ void HunterBaseRos::Run() {
 
     // publish robot state at 50Hz while listening to twist commands
     messenger->SetupSubscription();
-    rclcpp::Rate rate(50);
+    const std::chrono::duration<double> frame_duration(1.0 / 50.0);  // 20ms per frame at 50Hz
+    auto last_time = std::chrono::steady_clock::now();
     keep_running_ = true;
     while (keep_running_) {
       messenger->PublishStateToROS();
-      // robot_->EnableCommandedMode();
       rclcpp::spin_some(shared_from_this());
-      rate.sleep();
-    // }
+
+      // Use steady_clock-based sleep to avoid ROS clock mismatch
+      auto now = std::chrono::steady_clock::now();
+      auto elapsed = now - last_time;
+      if (elapsed < frame_duration) {
+        std::this_thread::sleep_for(frame_duration - elapsed);
+        last_time = std::chrono::steady_clock::now();
+      } else {
+        last_time = now;
+      }
     }
 }
 }  // namespace westonrobot

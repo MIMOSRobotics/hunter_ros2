@@ -18,6 +18,8 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <ackermann_msgs/msg/ackermann_drive.hpp>
+#include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
@@ -87,14 +89,36 @@ class HunterMessenger {
     status_pub_ = node_->create_publisher<hunter_msgs::msg::HunterStatus>(
         "/hunter_status", 10);
 
-    // cmd subscriber
-  // Subscribe to TwistStamped to get timestamped velocity commands
-  motion_cmd_sub_ = node_->create_subscription<geometry_msgs::msg::TwistStamped>(
-    "/cmd_vel", 10,
-    std::bind(&HunterMessenger::TwistStampedCmdCallback, this,
-          std::placeholders::_1));
+    // Get cmd message type parameter (already declared in node constructor)
+    std::string cmd_msg_type = node_->get_parameter("cmd_msg_type").as_string();
 
-    
+    // Subscribe to appropriate command message type
+    if (cmd_msg_type == "twist") {
+      motion_cmd_twist_sub_ = node_->create_subscription<geometry_msgs::msg::Twist>(
+        "/cmd_vel", 10,
+        std::bind(&HunterMessenger::TwistCmdCallback, this,
+              std::placeholders::_1));
+      std::cout << "[hunter_base] Subscribed to geometry_msgs/Twist on /cmd_vel" << std::endl;
+    } else if (cmd_msg_type == "ackermann_drive") {
+      motion_cmd_ackermann_sub_ = node_->create_subscription<ackermann_msgs::msg::AckermannDrive>(
+        "/cmd_vel", 10,
+        std::bind(&HunterMessenger::AckermannDriveCmdCallback, this,
+              std::placeholders::_1));
+      std::cout << "[hunter_base] Subscribed to ackermann_msgs/AckermannDrive on /cmd_vel" << std::endl;
+    } else if (cmd_msg_type == "ackermann_drive_stamped") {
+      motion_cmd_ackermann_stamped_sub_ = node_->create_subscription<ackermann_msgs::msg::AckermannDriveStamped>(
+        "/cmd_vel", 10,
+        std::bind(&HunterMessenger::AckermannDriveStampedCmdCallback, this,
+              std::placeholders::_1));
+      std::cout << "[hunter_base] Subscribed to ackermann_msgs/AckermannDriveStamped on /cmd_vel" << std::endl;
+    } else {
+      // Default to twist_stamped
+      motion_cmd_sub_ = node_->create_subscription<geometry_msgs::msg::TwistStamped>(
+        "/cmd_vel", 10,
+        std::bind(&HunterMessenger::TwistStampedCmdCallback, this,
+              std::placeholders::_1));
+      std::cout << "[hunter_base] Subscribed to geometry_msgs/TwistStamped on /cmd_vel (default)" << std::endl;
+    }
   }
 
   void PublishStateToROS() {
@@ -180,7 +204,10 @@ class HunterMessenger {
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   rclcpp::Publisher<hunter_msgs::msg::HunterStatus>::SharedPtr status_pub_;
 
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr motion_cmd_twist_sub_;
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr motion_cmd_sub_;
+  rclcpp::Subscription<ackermann_msgs::msg::AckermannDrive>::SharedPtr motion_cmd_ackermann_sub_;
+  rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr motion_cmd_ackermann_stamped_sub_;
   
 
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
@@ -201,6 +228,39 @@ class HunterMessenger {
   rclcpp::Time last_cmd_time_;
   double cmd_timeout_sec_ = 0.0;  // 0 => disabled (can be exposed via parameter if needed)
 
+  // Convert Ackermann drive to internal representation (linear + steering angle)
+  void AckermannDriveToCommand(const ackermann_msgs::msg::AckermannDrive &ackermann) {
+    double linear = ackermann.speed;
+    double steering_angle = ackermann.steering_angle;
+    hunter_->SetMotionCommand(linear, steering_angle);
+  }
+
+  void AckermannDriveCmdCallback(const ackermann_msgs::msg::AckermannDrive::SharedPtr msg) {
+    last_cmd_time_ = node_->get_clock()->now();
+    if (!simulated_robot_) {
+      AckermannDriveToCommand(*msg);
+    } else {
+      std::lock_guard<std::mutex> guard(twist_mutex_);
+      // Store as equivalent twist for simulation
+      current_twist_.linear.x = msg->speed;
+      current_twist_.angular.z = 0;  // Not directly used in simulation path
+    }
+  }
+
+  void AckermannDriveStampedCmdCallback(const ackermann_msgs::msg::AckermannDriveStamped::SharedPtr msg) {
+    const auto node_clock_type = node_->get_clock()->get_clock_type();
+    const rclcpp::Time cmd_stamp_node_clock(msg->header.stamp, node_clock_type);
+    last_cmd_time_ = cmd_stamp_node_clock;
+    if (!simulated_robot_) {
+      AckermannDriveToCommand(msg->drive);
+    } else {
+      std::lock_guard<std::mutex> guard(twist_mutex_);
+      // Store as equivalent twist for simulation
+      current_twist_.linear.x = msg->drive.speed;
+      current_twist_.angular.z = 0;  // Not directly used in simulation path
+    }
+  }
+
   // Legacy (unused now) Twist callback retained for backward compatibility if needed
   void TwistCmdCallback(const geometry_msgs::msg::Twist::SharedPtr msg) {
     rclcpp::Time now = node_->get_clock()->now();
@@ -215,9 +275,12 @@ class HunterMessenger {
 
   // New TwistStamped callback (primary)
   void TwistStampedCmdCallback(const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
-    last_cmd_time_ = msg->header.stamp;
+    const auto node_clock_type = node_->get_clock()->get_clock_type();
+    const rclcpp::Time cmd_stamp_node_clock(msg->header.stamp, node_clock_type);
+
+    last_cmd_time_ = cmd_stamp_node_clock;
     if (!simulated_robot_) {
-      SetHunterMotionCommand(msg->twist, msg->header.stamp);
+      SetHunterMotionCommand(msg->twist, cmd_stamp_node_clock);
     } else {
       std::lock_guard<std::mutex> guard(twist_mutex_);
       current_twist_ = msg->twist;

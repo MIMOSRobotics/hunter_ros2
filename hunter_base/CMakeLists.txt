@@ -25,6 +25,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(ackermann_msgs REQUIRED)
 
 find_package(hunter_msgs REQUIRED)
 find_package(ugv_sdk REQUIRED)
@@ -47,6 +48,7 @@ set(DEPENDENCIES
   hunter_msgs
   sensor_msgs
   tf2_geometry_msgs
+  ackermann_msgs
 )
 
 
